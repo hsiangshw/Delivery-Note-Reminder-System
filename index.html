@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1E5140">
+<title>送貨單</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #E9ECE7;
+  --sheet: #FFFFFF;
+  --ink: #1C2421;
+  --muted: #5B6661;
+  --line: #D3D9D2;
+  --bottle: #1E5140;
+  --bottle-soft: #E3EEE8;
+  --focus: #8DB9A4;
+  --stamp: #B8322A;
+  --num: "Barlow Semi Condensed", "PingFang TC", "Noto Sans TC", sans-serif;
+  --text: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 16px/1.6 var(--text); -webkit-text-size-adjust: 100%; }
+main { max-width: 520px; min-height: 100vh; margin: 0 auto; background: var(--sheet); }
+[hidden] { display: none !important; }
+
+.slip-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; padding: calc(18px + env(safe-area-inset-top)) 20px 18px; border-bottom: 1px dashed var(--line); }
+.slip-title { margin: 0; font-size: 20px; font-weight: 600; }
+.who { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.readout { text-align: right; }
+.readout-date { font-family: var(--num); font-weight: 600; font-size: 48px; line-height: 1; color: var(--bottle); font-variant-numeric: tabular-nums; }
+.readout-sub { margin-top: 4px; font-size: 13px; color: var(--muted); }
+.readout.empty .readout-date { color: var(--line); }
+
+form { padding: 4px 20px calc(112px + env(safe-area-inset-bottom)); }
+fieldset, .field { border: 0; margin: 0; padding: 18px 0 4px; min-width: 0; }
+legend, .field-label { float: left; width: 100%; padding: 0; margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.field-label { float: none; display: block; }
+.options, .photos, .extra { clear: both; }
+
+.options { display: grid; gap: 8px; }
+.options.date { grid-template-columns: repeat(4, 1fr); }
+.options.slot { grid-template-columns: repeat(3, 1fr); }
+.opt { position: relative; }
+.opt input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.opt span { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 10px; text-align: center; line-height: 1.3; }
+.opt small { font-family: var(--num); font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.opt input:checked + span { background: var(--bottle); border-color: var(--bottle); color: #fff; }
+.opt input:checked + span small { color: #CFE3D8; }
+.opt input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.extra { margin-top: 10px; }
+input[type=date], input[type=time], textarea { width: 100%; font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+input[type=date], input[type=time] { min-height: 50px; font-family: var(--num); font-size: 19px; }
+textarea { display: block; min-height: 112px; resize: vertical; }
+input[type=date]:focus, input[type=time]:focus, textarea:focus { outline: none; border-color: var(--bottle); box-shadow: 0 0 0 3px var(--bottle-soft); }
+.count { margin-top: 4px; text-align: right; font-size: 12px; color: var(--muted); font-family: var(--num); }
+
+.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.thumb, .add { position: relative; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden; }
+.thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.thumb button { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(28, 36, 33, .75); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; border: 1.5px dashed var(--line); color: var(--bottle); font-size: 13px; text-align: center; cursor: pointer; }
+.add .plus { font-size: 30px; line-height: 1; }
+.add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.add:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.rule { margin: 18px 0 0; font-size: 13px; color: var(--muted); }
+.rule.bad { color: var(--stamp); }
+.error { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: #FBEDEB; color: var(--stamp); font-size: 14px; }
+.error:empty { display: none; }
+
+.submit-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, .96); border-top: 1px solid var(--line); }
+.submit-bar .inner { max-width: 480px; margin: 0 auto; }
+.btn { display: block; width: 100%; min-height: 52px; border: 0; border-radius: 12px; font: 600 17px/1 var(--text); cursor: pointer; }
+.btn-primary { background: var(--bottle); color: #fff; }
+.btn-primary:disabled { opacity: .55; cursor: default; }
+.btn-ghost { background: transparent; color: var(--bottle); border: 1px solid var(--line); }
+.btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.done { padding: calc(48px + env(safe-area-inset-top)) 24px 40px; text-align: center; }
+.stamp { width: 150px; height: 150px; margin: 0 auto 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid var(--stamp); border-radius: 50%; color: var(--stamp); box-shadow: inset 0 0 0 5px #fff, inset 0 0 0 7px var(--stamp); transform: rotate(-9deg); }
+.stamp b { font-size: 30px; letter-spacing: .12em; line-height: 1.1; }
+.stamp span { margin-top: 4px; font-family: var(--num); font-size: 19px; font-weight: 600; }
+.done-date { font-family: var(--num); font-size: 34px; font-weight: 600; line-height: 1.15; color: var(--bottle); }
+.done-note { max-width: 32em; margin: 10px auto 0; color: var(--muted); font-size: 15px; white-space: pre-wrap; }
+.done-status { margin: 18px 0 28px; font-size: 14px; }
+.done-status.warn { color: var(--stamp); }
+.done .btn + .btn { margin-top: 10px; }
+
+.pv-body { padding: 16px 20px calc(112px + env(safe-area-inset-bottom)); }
+.pv-note { margin: 0 0 16px; white-space: pre-wrap; }
+.pv-list img { display: block; width: 100%; height: auto; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.pv-loading { color: var(--muted); font-size: 14px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .stamp.hit { animation: stamp .32s cubic-bezier(.2, .9, .3, 1.2) both; }
+  @keyframes stamp {
+    from { opacity: 0; transform: rotate(-9deg) scale(1.6); }
+    to   { opacity: 1; transform: rotate(-9deg) scale(1); }
+  }
+}
+</style>
+</head>
+<body>
+<main>
+  <!-- 建單表單 -->
+  <div id="formView">
+    <header class="slip-head">
+      <div>
+        <h1 class="slip-title">送貨單</h1>
+        <p class="who" id="who">正在連線 LINE…</p>
+      </div>
+      <div class="readout empty" id="readout" aria-live="polite">
+        <div class="readout-date" id="readoutDate">--/--</div>
+        <div class="readout-sub" id="readoutSub">尚未選日期</div>
+      </div>
+    </header>
+
+    <form id="form" novalidate>
+      <fieldset>
+        <legend>送貨日期</legend>
+        <div class="options date" id="dateOptions"></div>
+        <div class="extra" id="otherDateWrap" hidden>
+          <input type="date" id="otherDate" aria-label="其他送貨日期">
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>時段</legend>
+        <div class="options slot">
+          <label class="opt"><input type="radio" name="slot" value="morning"><span>上午<small>09–12</small></span></label>
+          <label class="opt"><input type="radio" name="slot" value="afternoon"><span>下午<small>13–17</small></span></label>
+          <label class="opt"><input type="radio" name="slot" value="evening"><span>晚上<small>18–21</small></span></label>
+          <label class="opt"><input type="radio" name="slot" value="custom"><span>指定時間</span></label>
+          <label class="opt"><input type="radio" name="slot" value="none"><span>時間未定</span></label>
+        </div>
+        <div class="extra" id="timeWrap" hidden>
+          <input type="time" id="time" aria-label="指定送貨時間">
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label class="field-label" for="note">註解</label>
+        <textarea id="note" maxlength="500" placeholder="客戶、電話、地址、品項數量…"></textarea>
+        <div class="count"><span id="noteCount">0</span> / 500</div>
+      </div>
+
+      <fieldset>
+        <legend>單據照片</legend>
+        <div class="photos" id="photos">
+          <label class="add" id="addTile">
+            <span class="plus" aria-hidden="true">+</span>
+            <span id="addText">拍照或選照片</span>
+            <input type="file" id="fileInput" accept="image/*" multiple>
+          </label>
+        </div>
+      </fieldset>
+
+      <p class="rule" id="rule">註解和照片至少要填一項,照片最多 5 張。</p>
+      <p class="error" id="error" role="alert"></p>
+
+      <div class="submit-bar">
+        <div class="inner">
+          <button class="btn btn-primary" type="submit" id="submitBtn" disabled>建立送貨單</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- 建單完成 -->
+  <section class="done" id="doneView" hidden>
+    <div class="stamp" id="stamp"><b>已建單</b><span id="doneNo"></span></div>
+    <div class="done-date" id="doneDate"></div>
+    <p class="done-note" id="doneNote"></p>
+    <p class="done-status" id="doneStatus"></p>
+    <button class="btn btn-primary" type="button" id="againBtn">再建一張</button>
+    <button class="btn btn-ghost" type="button" id="closeBtn">關閉</button>
+  </section>
+
+  <!-- 看照片 -->
+  <div id="photoView" hidden>
+    <header class="slip-head">
+      <div>
+        <h1 class="slip-title">單據照片</h1>
+        <p class="who" id="pvWho">載入中…</p>
+      </div>
+      <div class="readout" id="pvReadout">
+        <div class="readout-date" id="pvDate">--/--</div>
+        <div class="readout-sub" id="pvSub"></div>
+      </div>
+    </header>
+    <div class="pv-body">
+      <p class="pv-note" id="pvNote" hidden></p>
+      <p class="pv-loading" id="pvLoading">正在讀取照片…</p>
+      <div class="pv-list" id="pvList"></div>
+      <p class="error" id="pvError" role="alert"></p>
+    </div>
+    <div class="submit-bar">
+      <div class="inner">
+        <button class="btn btn-ghost" type="button" id="pvClose">關閉</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+/* ===== 設定:部署時改這兩行 ===== */
+const LIFF_ID = 'REPLACE_WITH_LIFF_ID';
+const API_URL = 'REPLACE_WITH_APPS_SCRIPT_URL';
+/* ================================= */
+
+const MAX_PHOTOS = 5;
+const MAX_SIDE = 1600;
+const JPEG_QUALITY = 0.82;
+const WEEK = '日一二三四五六';
+const SLOT_TEXT = { morning: '上午', afternoon: '下午', evening: '晚上', custom: '指定時間', none: '時間未定' };
+
+const $ = (id) => document.getElementById(id);
+const state = { date: '', photos: [], busy: false, requestId: '' };
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function addDays(d, n) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+function parseYmd(s) { const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function newId() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function isPhotoMode() { return /view(=|%3D)photos/.test(location.search + location.hash); }
+function closeApp() { if (window.liff && liff.isInClient()) liff.closeWindow(); else window.close(); }
+
+async function callApi(payload) {
+  try {
+    // 不設定 Content-Type(預設 text/plain),避免觸發 Apps Script 不支援的 CORS 預檢
+    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '操作失敗,請再試一次。');
+    return data;
+  } catch (err) {
+    if (err instanceof TypeError) throw new Error('連不上伺服器,請確認網路後再試一次。');
+    if (err instanceof SyntaxError) throw new Error('伺服器回應異常,請通知管理者檢查 Apps Script 部署。');
+    throw err;
+  }
+}
+
+/* ----- 日期與時段 ----- */
+
+function buildDateOptions() {
+  const today = new Date();
+  const box = $('dateOptions');
+  box.innerHTML = '';
+  [['今天', 0], ['明天', 1], ['後天', 2]].forEach(([word, offset]) => {
+    const d = addDays(today, offset);
+    box.insertAdjacentHTML('beforeend',
+      '<label class="opt"><input type="radio" name="dateChoice" value="' + ymd(d) + '">' +
+      '<span>' + word + '<small>' + (d.getMonth() + 1) + '/' + d.getDate() + '</small></span></label>');
+  });
+  box.insertAdjacentHTML('beforeend',
+    '<label class="opt"><input type="radio" name="dateChoice" value="other"><span>其他日期</span></label>');
+  $('otherDate').min = ymd(today);
+}
+
+function currentSlot() {
+  const r = document.querySelector('input[name="slot"]:checked');
+  return r ? r.value : '';
+}
+
+function slotText() {
+  const s = currentSlot();
+  if (s === 'custom') return $('time').value || '指定時間';
+  return SLOT_TEXT[s] || '';
+}
+
+function updateReadout() {
+  const box = $('readout');
+  if (!state.date) {
+    box.classList.add('empty');
+    $('readoutDate').textContent = '--/--';
+    $('readoutSub').textContent = '尚未選日期';
+    return;
+  }
+  const d = parseYmd(state.date);
+  box.classList.remove('empty');
+  $('readoutDate').textContent = (d.getMonth() + 1) + '/' + d.getDate();
+  $('readoutSub').textContent = '週' + WEEK[d.getDay()] + (slotText() ? ' ' + slotText() : '');
+}
+
+/* ----- 照片 ----- */
+
+function compress(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * scale);
+      const h = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      resolve({ dataUrl: dataUrl, data: dataUrl.split(',')[1], mime: 'image/jpeg' });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('有一張照片讀不出來,請改用手機相機拍的 JPG 照片或截圖。'));
+    };
+    img.src = url;
+  });
+}
+
+async function addFiles(fileList) {
+  const files = Array.from(fileList || []);
+  $('fileInput').value = '';
+  const room = MAX_PHOTOS - state.photos.length;
+  if (files.length > room) showError('照片最多 ' + MAX_PHOTOS + ' 張,多選的已略過。');
+  $('addText').textContent = '處理中…';
+  for (const file of files.slice(0, room)) {
+    try {
+      state.photos.push(await compress(file));
+      renderPhotos();
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+  $('addText').textContent = '拍照或選照片';
+}
+
+function renderPhotos() {
+  const box = $('photos');
+  box.querySelectorAll('.thumb').forEach((n) => n.remove());
+  state.photos.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = '<img src="' + p.dataUrl + '" alt="單據照片 ' + (i + 1) + '">' +
+      '<button type="button" data-remove="' + i + '" aria-label="移除第 ' + (i + 1) + ' 張照片">×</button>';
+    box.insertBefore(div, $('addTile'));
+  });
+  $('addTile').hidden = state.photos.length >= MAX_PHOTOS;
+}
+
+/* ----- 驗證與送出 ----- */
+
+function validate() {
+  if (!state.date) return '請選擇送貨日期。';
+  if (state.date < ymd(new Date())) return '送貨日期不能早於今天。';
+  const slot = currentSlot();
+  if (!slot) return '請選擇時段。';
+  if (slot === 'custom' && !$('time').value) return '請填寫指定時間。';
+  if (!$('note').value.trim() && state.photos.length === 0) {
+    $('rule').classList.add('bad');
+    return '註解和照片至少要填一項。';
+  }
+  return '';
+}
+
+function showError(msg) {
+  $('error').textContent = msg;
+  $('error').scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function clearError() {
+  $('error').textContent = '';
+  $('rule').classList.remove('bad');
+}
+
+function setBusy(on) {
+  $('submitBtn').disabled = on;
+  $('submitBtn').textContent = on ? '建立中…' : '建立送貨單';
+}
+
+function showDone(data) {
+  $('formView').hidden = true;
+  $('doneView').hidden = false;
+  $('doneNo').textContent = data.orderNo;
+  $('doneDate').textContent = data.dateLabel + ' ' + data.slotLabel;
+  $('doneNote').textContent = data.note || ('單據照片 ' + data.photoCount + ' 張');
+  const st = $('doneStatus');
+  st.textContent = data.groupNotified
+    ? '已加入 Google 日曆,並通知工作群組。'
+    : '已加入 Google 日曆,但工作群組通知沒發出去,請在群組說一聲。';
+  st.classList.toggle('warn', !data.groupNotified);
+  const stamp = $('stamp');
+  stamp.classList.remove('hit');
+  void stamp.offsetWidth;
+  stamp.classList.add('hit');
+  window.scrollTo(0, 0);
+}
+
+function resetForm() {
+  $('form').reset();
+  state.date = '';
+  state.photos = [];
+  state.requestId = '';
+  $('otherDateWrap').hidden = true;
+  $('timeWrap').hidden = true;
+  $('noteCount').textContent = '0';
+  buildDateOptions();
+  renderPhotos();
+  updateReadout();
+  clearError();
+  $('doneView').hidden = true;
+  $('formView').hidden = false;
+  window.scrollTo(0, 0);
+}
+
+/* ----- 看照片 ----- */
+
+async function openPhotoView() {
+  const id = new URLSearchParams(location.search).get('id');
+  const fail = (msg) => {
+    $('pvLoading').hidden = true;
+    $('pvWho').textContent = '';
+    $('pvError').textContent = msg;
+  };
+  if (!id) return fail('找不到單據編號,請從卡片上的「看照片」重新開啟。');
+  try {
+    const data = await callApi({ action: 'getPhotos', idToken: liff.getIDToken(), id: id });
+    const d = parseYmd(data.ymd);
+    $('pvDate').textContent = (d.getMonth() + 1) + '/' + d.getDate();
+    $('pvSub').textContent = '週' + WEEK[d.getDay()] + ' ' + data.slotLabel;
+    $('pvWho').textContent = [data.orderNo, data.createdBy].filter(Boolean).join(' ') + (data.delivered ? '(已送達)' : '');
+    $('pvNote').textContent = data.note;
+    $('pvNote').hidden = !data.note;
+    $('pvLoading').hidden = true;
+    if (!data.photos.length) {
+      $('pvError').textContent = '這張單沒有照片,或照片已從 Drive 刪除。';
+      return;
+    }
+    data.photos.forEach((p, i) => {
+      const img = new Image();
+      img.alt = '單據照片 ' + (i + 1);
+      img.src = 'data:' + p.mime + ';base64,' + p.data;
+      $('pvList').appendChild(img);
+    });
+  } catch (err) {
+    fail(err.message);
+  }
+}
+
+/* ----- 事件 ----- */
+
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (!$('formView').contains(t)) return;
+  clearError();
+  if (t.name === 'dateChoice') {
+    const other = t.value === 'other';
+    $('otherDateWrap').hidden = !other;
+    state.date = other ? $('otherDate').value : t.value;
+    if (other) {
+      const el = $('otherDate');
+      try { el.showPicker(); } catch (_) { el.focus(); }
+    }
+  } else if (t.id === 'otherDate') {
+    state.date = t.value;
+  } else if (t.name === 'slot') {
+    $('timeWrap').hidden = t.value !== 'custom';
+    if (t.value === 'custom') $('time').focus();
+  } else if (t.id === 'fileInput') {
+    addFiles(t.files);
+  }
+  updateReadout();
+});
+
+$('time').addEventListener('input', updateReadout);
+
+$('note').addEventListener('input', () => {
+  $('noteCount').textContent = $('note').value.length;
+  clearError();
+});
+
+$('photos').addEventListener('click', (e) => {
+  const i = e.target.getAttribute('data-remove');
+  if (i !== null) {
+    state.photos.splice(Number(i), 1);
+    renderPhotos();
+  }
+});
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (state.busy) return;
+  clearError();
+  const problem = validate();
+  if (problem) return showError(problem);
+
+  state.busy = true;
+  setBusy(true);
+  if (!state.requestId) state.requestId = newId();
+  try {
+    const data = await callApi({
+      action: 'createOrder',
+      requestId: state.requestId,
+      idToken: liff.getIDToken(),
+      date: state.date,
+      slot: currentSlot(),
+      time: $('time').value,
+      note: $('note').value.trim(),
+      photos: state.photos.map((p) => ({ data: p.data, mime: p.mime })),
+    });
+    showDone(data);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    state.busy = false;
+    setBusy(false);
+  }
+});
+
+$('againBtn').addEventListener('click', resetForm);
+$('closeBtn').addEventListener('click', closeApp);
+$('pvClose').addEventListener('click', closeApp);
+
+/* ----- 啟動 ----- */
+
+async function init() {
+  const photoMode = isPhotoMode();
+  $('formView').hidden = photoMode;
+  $('photoView').hidden = !photoMode;
+  if (!photoMode) {
+    buildDateOptions();
+    updateReadout();
+  }
+
+  const report = (msg) => {
+    if (photoMode) {
+      $('pvLoading').hidden = true;
+      $('pvWho').textContent = '';
+      $('pvError').textContent = msg;
+    } else {
+      $('who').textContent = '';
+      showError(msg);
+    }
+  };
+
+  if (LIFF_ID.indexOf('REPLACE') === 0 || API_URL.indexOf('REPLACE') === 0) {
+    return report('尚未設定 LIFF_ID 或 API_URL,請通知管理者。');
+  }
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) {
+      liff.login({ redirectUri: location.href });
+      return;
+    }
+    if (photoMode) return openPhotoView();
+    const token = liff.getDecodedIDToken();
+    $('who').textContent = token && token.name ? '建單人:' + token.name : '已登入 LINE';
+    $('submitBtn').disabled = false;
+  } catch (err) {
+    console.error(err);
+    report('無法連線 LINE,請關閉這個畫面,再從 LINE 重新開啟。');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
