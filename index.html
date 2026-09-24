@@ -560,7 +560,7 @@ async function init() {
     $('submitBtn').disabled = false;
   } catch (err) {
     console.error(err);
-    report('無法連線 LINE:' + (err && err.message ? err.message : err));
+    report('無法連線 LINE,請關閉這個畫面,再從 LINE 重新開啟。');
   }
 }
 
