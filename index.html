@@ -235,17 +235,78 @@ function newId() {
 function isPhotoMode() { return /view(=|%3D)photos/.test(location.search + location.hash); }
 function closeApp() { if (window.liff && liff.isInClient()) liff.closeWindow(); else window.close(); }
 
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+function networkError(msg) {
+  const e = new Error(msg);
+  e.network = true;
+  return e;
+}
+
 async function callApi(payload) {
+  let res, data;
   try {
     // 不設定 Content-Type(預設 text/plain),避免觸發 Apps Script 不支援的 CORS 預檢
-    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || '操作失敗,請再試一次。');
-    return data;
+    res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
   } catch (err) {
-    if (err instanceof TypeError) throw new Error('連不上伺服器,請確認網路後再試一次。');
-    if (err instanceof SyntaxError) throw new Error('伺服器回應異常,請通知管理者檢查 Apps Script 部署。');
-    throw err;
+    throw networkError('連不上伺服器,請確認網路後再試一次。');
+  }
+  try {
+    data = await res.json();
+  } catch (err) {
+    throw networkError('伺服器回應異常,請通知管理者檢查 Apps Script 部署。');
+  }
+  if (!data.ok) throw new Error(data.error || '操作失敗,請再試一次。');
+  return data;
+}
+
+/** 用 <script> 載入的方式呼叫後端(JSONP),不受跨網域轉址限制。只用在資料量小的請求。 */
+function callJsonp(payload, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const cb = 'jsonp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const s = document.createElement('script');
+    const done = (err, data) => {
+      clearTimeout(timer);
+      delete window[cb];
+      s.remove();
+      if (err) reject(err); else resolve(data);
+    };
+    const timer = setTimeout(() => done(networkError('伺服器沒有回應,請稍後再試。')), timeoutMs || 20000);
+    window[cb] = (data) => done(null, data);
+    s.onerror = () => done(networkError('連不上伺服器,請確認網路後再試一次。'));
+    s.src = API_URL + '?callback=' + cb + '&payload=' + encodeURIComponent(JSON.stringify(payload));
+    document.head.appendChild(s);
+  });
+}
+
+/**
+ * 送出送貨單。若沒收到回應,單可能其實已經建立(群組已收到通知),
+ * 所以先查詢建立狀態,查不到才重送。重送用同一個 requestId,後端不會重複建單。
+ */
+async function submitOrder(payload) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await callApi(payload);
+    } catch (err) {
+      if (!err.network) throw err;
+      $('submitBtn').textContent = '確認中…';
+      await sleep(1500);
+      const st = await callJsonp({ action: 'status', requestId: payload.requestId }).catch(() => null);
+      if (st && st.ok) return Object.assign({ note: payload.note }, st);
+    }
+  }
+  throw new Error('無法確認這張單有沒有建立成功。請先看工作群組有沒有收到這張單,沒有的話再按一次「建立送貨單」。');
+}
+
+/** 讀取照片:POST 失敗時改用 JSONP */
+async function loadPhotos(payload) {
+  try {
+    return await callApi(payload);
+  } catch (err) {
+    if (!err.network) throw err;
+    const data = await callJsonp(payload, 60000);
+    if (!data.ok) throw new Error(data.error || '讀取照片失敗。');
+    return data;
   }
 }
 
@@ -426,7 +487,7 @@ async function openPhotoView() {
   };
   if (!id) return fail('找不到單據編號,請從卡片上的「看照片」重新開啟。');
   try {
-    const data = await callApi({ action: 'getPhotos', idToken: liff.getIDToken(), id: id });
+    const data = await loadPhotos({ action: 'getPhotos', idToken: liff.getIDToken(), id: id });
     const d = parseYmd(data.ymd);
     $('pvDate').textContent = (d.getMonth() + 1) + '/' + d.getDate();
     $('pvSub').textContent = '週' + WEEK[d.getDay()] + ' ' + data.slotLabel;
@@ -500,7 +561,7 @@ $('form').addEventListener('submit', async (e) => {
   setBusy(true);
   if (!state.requestId) state.requestId = newId();
   try {
-    const data = await callApi({
+    const data = await submitOrder({
       action: 'createOrder',
       requestId: state.requestId,
       idToken: liff.getIDToken(),
