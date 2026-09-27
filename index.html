@@ -96,6 +96,8 @@ input[type=date]:focus, input[type=time]:focus, textarea:focus { outline: none; 
 .pv-note { margin: 0 0 16px; white-space: pre-wrap; }
 .pv-list img { display: block; width: 100%; height: auto; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
 .pv-loading { color: var(--muted); font-size: 14px; }
+.pv-slot { display: flex; align-items: center; justify-content: center; aspect-ratio: 3 / 4; margin-bottom: 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--paper); color: var(--muted); font-size: 14px; }
+.pv-slot.pv-fail { aspect-ratio: auto; padding: 16px; color: var(--stamp); }
 
 @media (prefers-reduced-motion: no-preference) {
   .stamp.hit { animation: stamp .32s cubic-bezier(.2, .9, .3, 1.2) both; }
@@ -211,13 +213,13 @@ input[type=date]:focus, input[type=time]:focus, textarea:focus { outline: none; 
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
 /* ===== 設定:部署時改這兩行 ===== */
-const LIFF_ID = '2011729456-9ECsaBTX';
-const API_URL = 'https://script.google.com/macros/s/AKfycbyJc7MDeQcz4uQdE5Aa0FqJGNtmQRMyPdWOiCkejUwWMWotxdTuvFi1pcS39zua_LrJ/exec';
+const LIFF_ID = 'REPLACE_WITH_LIFF_ID';
+const API_URL = 'REPLACE_WITH_APPS_SCRIPT_URL';
 /* ================================= */
 
 const MAX_PHOTOS = 5;
-const MAX_SIDE = 1600;
-const JPEG_QUALITY = 0.82;
+const MAX_SIDE = 1280;       // 手寫單在這個尺寸仍清楚,上傳量約為 1600px 的一半
+const JPEG_QUALITY = 0.75;
 const WEEK = '日一二三四五六';
 const SLOT_TEXT = { morning: '上午', afternoon: '下午', evening: '晚上', custom: '指定時間', none: '時間未定' };
 
@@ -290,7 +292,8 @@ async function submitOrder(payload) {
     } catch (err) {
       if (!err.network) throw err;
       $('submitBtn').textContent = '確認中…';
-      await sleep(1500);
+      // 轉址失敗時伺服器其實已處理完,第一次只需短暫等待
+      await sleep(attempt === 1 ? 300 : 1000);
       const st = await callJsonp({ action: 'status', requestId: payload.requestId }).catch(() => null);
       if (st && st.ok) return Object.assign({ note: payload.note }, st);
     }
@@ -298,14 +301,14 @@ async function submitOrder(payload) {
   throw new Error('無法確認這張單有沒有建立成功。請先看工作群組有沒有收到這張單,沒有的話再按一次「建立送貨單」。');
 }
 
-/** 讀取照片:POST 失敗時改用 JSONP */
-async function loadPhotos(payload) {
+/** 讀取類請求:POST 失敗時改用 JSONP */
+async function callWithFallback(payload, timeoutMs) {
   try {
     return await callApi(payload);
   } catch (err) {
     if (!err.network) throw err;
-    const data = await callJsonp(payload, 60000);
-    if (!data.ok) throw new Error(data.error || '讀取照片失敗。');
+    const data = await callJsonp(payload, timeoutMs || 30000);
+    if (!data.ok) throw new Error(data.error || '讀取失敗,請再試一次。');
     return data;
   }
 }
@@ -486,28 +489,48 @@ async function openPhotoView() {
     $('pvError').textContent = msg;
   };
   if (!id) return fail('找不到單據編號,請從卡片上的「看照片」重新開啟。');
+  const idToken = liff.getIDToken();
+
+  // 第一步:先拿單據資訊,馬上顯示
+  let info;
   try {
-    const data = await loadPhotos({ action: 'getPhotos', idToken: liff.getIDToken(), id: id });
-    const d = parseYmd(data.ymd);
-    $('pvDate').textContent = (d.getMonth() + 1) + '/' + d.getDate();
-    $('pvSub').textContent = '週' + WEEK[d.getDay()] + ' ' + data.slotLabel;
-    $('pvWho').textContent = [data.orderNo, data.createdBy].filter(Boolean).join(' ') + (data.delivered ? '(已送達)' : '');
-    $('pvNote').textContent = data.note;
-    $('pvNote').hidden = !data.note;
-    $('pvLoading').hidden = true;
-    if (!data.photos.length) {
-      $('pvError').textContent = '這張單沒有照片,或照片已從 Drive 刪除。';
-      return;
-    }
-    data.photos.forEach((p, i) => {
+    info = await callWithFallback({ action: 'getOrder', idToken: idToken, id: id });
+  } catch (err) {
+    return fail(err.message);
+  }
+  const d = parseYmd(info.ymd);
+  $('pvDate').textContent = (d.getMonth() + 1) + '/' + d.getDate();
+  $('pvSub').textContent = '週' + WEEK[d.getDay()] + ' ' + info.slotLabel;
+  $('pvWho').textContent = [info.orderNo, info.createdBy].filter(Boolean).join(' ') + (info.delivered ? '(已送達)' : '');
+  $('pvNote').textContent = info.note;
+  $('pvNote').hidden = !info.note;
+  $('pvLoading').hidden = true;
+  if (!info.photoCount) {
+    $('pvError').textContent = '這張單沒有照片。';
+    return;
+  }
+
+  // 第二步:每張照片各自載入,先到先顯示
+  const slots = [];
+  for (let i = 0; i < info.photoCount; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'pv-slot';
+    slot.textContent = '照片 ' + (i + 1) + ' 載入中…';
+    $('pvList').appendChild(slot);
+    slots.push(slot);
+  }
+  await Promise.all(slots.map(async (slot, i) => {
+    try {
+      const p = await callWithFallback({ action: 'getPhoto', idToken: idToken, id: id, index: i }, 60000);
       const img = new Image();
       img.alt = '單據照片 ' + (i + 1);
       img.src = 'data:' + p.mime + ';base64,' + p.data;
-      $('pvList').appendChild(img);
-    });
-  } catch (err) {
-    fail(err.message);
-  }
+      slot.replaceWith(img);
+    } catch (err) {
+      slot.classList.add('pv-fail');
+      slot.textContent = '照片 ' + (i + 1) + ' 載入失敗:' + err.message;
+    }
+  }));
 }
 
 /* ----- 事件 ----- */
